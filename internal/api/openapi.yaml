@@ -1,0 +1,235 @@
+openapi: 3.1.0
+info:
+  title: Donna API
+  version: 0.1.0
+  description: Personal assistant decision, agent-tool, and chat API.
+servers:
+  - url: /
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      summary: Check service health
+      responses:
+        "204":
+          description: Service is ready.
+  /v1/decisions:
+    post:
+      operationId: decideRoute
+      summary: Classify a query for memory routing
+      security:
+        - AgentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [query], properties: {query: {type: string, minLength: 1}}}
+            example:
+              query: Where did I save my note?
+      responses:
+        "200":
+          description: Selected route and confidence.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+  /v1/checks:
+    post:
+      operationId: checkYesNo
+      summary: Evaluate a yes/no question against evidence
+      security:
+        - AgentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [question], properties: {question: {type: string, minLength: 1}, evidence: {type: string}}}
+            example:
+              question: Is the note saved?
+              evidence: Project notes folder
+      responses:
+        "200":
+          description: Boolean answer, or null when uncertain.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+        "503":
+          description: Yes/no evaluation is not configured.
+  /v1/chat:
+    post:
+      operationId: chatWithDonna
+      summary: Send a message through Donna's bounded agent loop
+      description: Omit session_id to start a conversation. Reuse the returned session_id for follow-up messages; sessions are temporary and in-memory.
+      security:
+        - AgentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 16384
+                session_id:
+                  type: string
+                  maxLength: 128
+                  pattern: "^[A-Za-z0-9_-]+$"
+            example:
+              message: Find the note I saved about the team meeting.
+      responses:
+        "200":
+          description: Donna's final response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Supplied chat session expired or is unknown.
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+        "503":
+          description: Agent chat is not configured.
+  /v1/tools:
+    get:
+      operationId: listAgentTools
+      summary: List available Donna tools
+      description: Registered only when the agent brain is configured; requires DONNA_AGENT_API_KEY.
+      security:
+        - AgentBearer: []
+      responses:
+        "200":
+          description: Tool definitions and input schemas.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ToolDefinition"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: Tool bridge is not configured.
+  /v1/tools/call:
+    post:
+      operationId: callAgentTool
+      summary: Execute a Donna tool
+      security:
+        - AgentBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, arguments]
+              properties:
+                name:
+                  type: string
+                arguments:
+                  type: object
+            example:
+              name: donna_check_yes_no
+              arguments:
+                question: Is the note saved?
+                evidence: Project notes folder
+      responses:
+        "200":
+          description: JSON result returned by the selected tool.
+          content:
+            application/json:
+              schema: {}
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Tool name is not registered.
+        "502":
+          $ref: "#/components/responses/ProviderFailure"
+        "503":
+          description: Requested tool is not configured.
+  /openapi.yaml:
+    get:
+      operationId: getOpenAPISpecification
+      summary: Download this OpenAPI specification
+      responses:
+        "200":
+          description: OpenAPI YAML document.
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /swagger:
+    get:
+      operationId: getSwaggerUI
+      summary: Open Swagger UI
+      responses:
+        "200":
+          description: Swagger UI HTML application.
+          content:
+            text/html:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    AgentBearer:
+      type: http
+      scheme: bearer
+      description: Bearer token required by model-backed endpoints.
+  schemas:
+    DecisionResult:
+      type: object
+      required: [action, confidence]
+      properties:
+        action: {type: string, enum: [answer_directly, structured_lookup, semantic_search, hybrid_search, clarify]}
+        confidence: {type: number, minimum: 0, maximum: 1}
+    CheckResult:
+      type: object
+      required: [answer, confidence]
+      properties:
+        answer:
+          oneOf: [{type: boolean}, {type: "null"}]
+        confidence: {type: number, minimum: 0, maximum: 1}
+    ChatResponse:
+      type: object
+      required: [answer, session_id]
+      properties:
+        answer: {type: string}
+        session_id: {type: string}
+    ToolDefinition:
+      type: object
+      required: [name, description, input_schema]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        input_schema: {type: object}
+  responses:
+    BadRequest:
+      description: Request body is invalid or missing required input.
+    Unauthorized:
+      description: Missing or invalid bearer token.
+    ProviderFailure:
+      description: Model or tool provider failed.
