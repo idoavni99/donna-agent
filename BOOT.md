@@ -41,6 +41,8 @@ For another OS or Python version, create a fresh environment and install the pro
 | `GOOGLE_CLIENT_SECRET` | No | Empty | Google OAuth client secret. |
 | `GOOGLE_REDIRECT_URI` | No | Empty | Registered Google OAuth callback URL. |
 | `DONNA_MIN_CONFIDENCE` | No | `0.55` | Minimum winning score required for a definite route or yes/no answer. |
+| `DONNA_DATABASE_URL` | No | Empty | PostgreSQL URL for persistent users, sessions, Google credentials, and approvals. |
+| `DONNA_JWT_SECRET` | No | Empty | At least 32 characters; enables account JWT authentication when set. |
 | `DONNA_ADDR` | No | `127.0.0.1:8080` | HTTP server bind address. |
 
 Donna uses OpenRouter's native `web_search` and conditionally enables `web_fetch` for valid public URLs. Search results are leads, not automatic identity confirmation. Social-media pages verify the source of content, not its truth or the account holder's identity. Ambiguous identity evidence should prompt a user question. Search and fetched page content are untrusted data, never instructions.

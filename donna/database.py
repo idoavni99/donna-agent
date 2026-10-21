@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+import time
 from typing import Any
 
 from donna.auth import AuthRepository, User
@@ -48,6 +50,9 @@ class Postgres:
                 action TEXT NOT NULL, payload JSONB NOT NULL, digest TEXT NOT NULL,
                 expires_at DOUBLE PRECISION NOT NULL, status TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id);
+            CREATE INDEX IF NOT EXISTS approvals_user_status_idx ON approvals(user_id, status);
+            CREATE INDEX IF NOT EXISTS approvals_expires_at_idx ON approvals(expires_at);
             """
         )
 
@@ -108,5 +113,71 @@ class PostgresCredentialStore(CredentialStore):
 
 
 class PostgresApprovalStore(ApprovalStore):
-    """Reserved adapter boundary; routes can switch to async repository methods later."""
-    pass
+    """Async PostgreSQL adapter for the approval store used by HTTP routes."""
+
+    def __init__(self, db: Postgres) -> None:
+        super().__init__()
+        self.db = db
+
+    async def aitems(self) -> list[Approval]:
+        pool = await self.db.ensure_pool()
+        rows = await pool.fetch(
+            "SELECT approval_id, user_id, action, payload, digest, expires_at, status "
+            "FROM approvals ORDER BY expires_at"
+        )
+        return [self._row_to_approval(row) for row in rows]
+
+    async def aget(self, approval_id: str) -> Approval | None:
+        pool = await self.db.ensure_pool()
+        row = await pool.fetchrow(
+            "SELECT approval_id, user_id, action, payload, digest, expires_at, status "
+            "FROM approvals WHERE approval_id=$1",
+            approval_id,
+        )
+        return self._row_to_approval(row) if row else None
+
+    async def acreate(
+        self, user_id: str, action: str, payload: dict[str, Any], ttl: int = 600
+    ) -> Approval:
+        approval = ApprovalStore.create(self, user_id, action, payload, ttl)
+        pool = await self.db.ensure_pool()
+        await pool.execute(
+            "INSERT INTO approvals(approval_id,user_id,action,payload,digest,expires_at,status) "
+            "VALUES($1,$2,$3,$4::jsonb,$5,$6,$7)",
+            approval.approval_id,
+            approval.user_id,
+            approval.action,
+            json.dumps(approval.payload, separators=(",", ":")),
+            approval.digest,
+            approval.expires_at,
+            approval.status,
+        )
+        return approval
+
+    async def aupdate(self, approval: Approval, status: str) -> Approval | None:
+        if status not in {"approved", "rejected"}:
+            raise ValueError("invalid approval status")
+        pool = await self.db.ensure_pool()
+        result = await pool.execute(
+            "UPDATE approvals SET status=$2 "
+            "WHERE approval_id=$1 AND status='pending' AND expires_at > $3",
+            approval.approval_id,
+            status,
+            time.time(),
+        )
+        if not result.endswith("1"):
+            return None
+        return Approval(
+            approval.approval_id, approval.user_id, approval.action, approval.payload,
+            approval.digest, approval.expires_at, status,
+        )
+
+    @staticmethod
+    def _row_to_approval(row: Any) -> Approval:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return Approval(
+            row["approval_id"], row["user_id"], row["action"], payload,
+            row["digest"], float(row["expires_at"]), row["status"],
+        )

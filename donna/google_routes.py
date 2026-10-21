@@ -38,9 +38,13 @@ def register_google_routes(app: FastAPI, service: Service) -> None:
     async def list_approvals(user: User = Depends(service.current_user)) -> list[dict]:
         if user is None:
             raise HTTPException(401, "unauthorized")
+        if hasattr(google.approvals, "aitems"):
+            approvals = await google.approvals.aitems()
+        else:
+            approvals = google.approvals.items()
         return [
             approval_json(item)
-            for item in google.approvals.items()
+            for item in approvals
             if item.user_id == user.id and item.status == "pending"
         ]
 
@@ -48,26 +52,47 @@ def register_google_routes(app: FastAPI, service: Service) -> None:
     async def approve(approval_id: str, user: User = Depends(service.current_user)) -> dict:
         if user is None:
             raise HTTPException(401, "unauthorized")
-        approval = google.approvals.get(approval_id)
+        approval = (
+            await google.approvals.aget(approval_id)
+            if hasattr(google.approvals, "aget")
+            else google.approvals.get(approval_id)
+        )
         if approval is None or approval.user_id != user.id:
             raise HTTPException(404, "approval not found")
         if approval.status != "pending" or approval.expires_at <= google.clock():
             raise HTTPException(409, "approval expired or already resolved")
         # Execution is deliberately isolated behind this service boundary. The Google
         # Workspace MCP toolset can be connected here without changing the HTTP contract.
-        updated = google.approvals.update(approval, "approved")
+        updated = (
+            await google.approvals.aupdate(approval, "approved")
+            if hasattr(google.approvals, "aupdate")
+            else google.approvals.update(approval, "approved")
+        )
+        if updated is None:
+            raise HTTPException(409, "approval expired or already resolved")
         return approval_json(updated)
 
     @app.post("/v1/approvals/{approval_id}/reject")
     async def reject(approval_id: str, user: User = Depends(service.current_user)) -> dict:
         if user is None:
             raise HTTPException(401, "unauthorized")
-        approval = google.approvals.get(approval_id)
+        approval = (
+            await google.approvals.aget(approval_id)
+            if hasattr(google.approvals, "aget")
+            else google.approvals.get(approval_id)
+        )
         if approval is None or approval.user_id != user.id:
             raise HTTPException(404, "approval not found")
         if approval.status != "pending":
             raise HTTPException(409, "approval already resolved")
-        return approval_json(google.approvals.update(approval, "rejected"))
+        updated = (
+            await google.approvals.aupdate(approval, "rejected")
+            if hasattr(google.approvals, "aupdate")
+            else google.approvals.update(approval, "rejected")
+        )
+        if updated is None:
+            raise HTTPException(409, "approval expired or already resolved")
+        return approval_json(updated)
 
     @app.post("/v1/integrations/google/proposals")
     async def proposal(request: Request, user: User = Depends(service.current_user)) -> dict:
@@ -80,6 +105,9 @@ def register_google_routes(app: FastAPI, service: Service) -> None:
             raise HTTPException(400, "invalid proposal JSON")
         if payload["action"] not in google.mutating_actions:
             raise HTTPException(400, "unsupported Google action")
-        return approval_json(
-            google.approvals.create(user.id, payload["action"], payload["payload"])
+        approval = (
+            await google.approvals.acreate(user.id, payload["action"], payload["payload"])
+            if hasattr(google.approvals, "acreate")
+            else google.approvals.create(user.id, payload["action"], payload["payload"])
         )
+        return approval_json(approval)

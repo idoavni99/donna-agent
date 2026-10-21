@@ -18,6 +18,6 @@
 - `google_workspace.py`: Google OAuth, replaceable credential/approval stores, and approval policy for Gmail/Calendar actions.
 - `google_routes.py`: optional Google connection, proposal, and approval HTTP routes.
 - `auth.py`: JWT authentication and replaceable user/session repository boundary.
-- `database.py`: PostgreSQL schema and repository foundation.
+- `database.py`: PostgreSQL schema, lifecycle, and persistent auth, credential, and approval repositories.
 - `account_routes.py`: JWT login and current-user routes.
 - `web.py`: public URL validation and DNS-pinned, host-restricted page fetching for the chat fetch tool.

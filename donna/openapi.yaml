@@ -171,6 +171,88 @@ paths:
           $ref: "#/components/responses/ProviderFailure"
         "503":
           description: Requested tool is not configured.
+  /v1/auth/login:
+    post:
+      operationId: login
+      summary: Issue a development account JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [email], properties: {email: {type: string, format: email}}}
+      responses:
+        "200": {description: Bearer token}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /v1/auth/me:
+    get:
+      operationId: currentUser
+      security: [{AccountBearer: []}]
+      responses:
+        "200": {description: Current user}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/integrations/google/authorize:
+    get:
+      operationId: authorizeGoogle
+      security: [{AccountBearer: []}]
+      responses:
+        "307": {description: Redirect to Google OAuth}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/integrations/google/callback:
+    get:
+      operationId: googleCallback
+      parameters:
+        - {name: state, in: query, required: true, schema: {type: string}}
+        - {name: code, in: query, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Google connection completed}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /v1/integrations/google:
+    delete:
+      operationId: disconnectGoogle
+      security: [{AccountBearer: []}]
+      responses:
+        "200": {description: Google disconnected}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/approvals:
+    get:
+      operationId: listApprovals
+      security: [{AccountBearer: []}]
+      responses:
+        "200": {description: Pending approvals}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /v1/approvals/{approval_id}/approve:
+    post:
+      operationId: approveAction
+      security: [{AccountBearer: []}]
+      parameters: [{name: approval_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: Approval accepted}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {description: Approval not found}
+        "409": {description: Approval expired or already resolved}
+  /v1/approvals/{approval_id}/reject:
+    post:
+      operationId: rejectAction
+      security: [{AccountBearer: []}]
+      parameters: [{name: approval_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        "200": {description: Approval rejected}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {description: Approval not found}
+        "409": {description: Approval already resolved}
+  /v1/integrations/google/proposals:
+    post:
+      operationId: createGoogleProposal
+      security: [{AccountBearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [action, payload], properties: {action: {type: string}, payload: {type: object}}}
+      responses:
+        "200": {description: Approval proposal}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
   /openapi.yaml:
     get:
       operationId: getOpenAPISpecification
@@ -199,6 +281,10 @@ components:
       type: http
       scheme: bearer
       description: Bearer token required by model-backed endpoints.
+    AccountBearer:
+      type: http
+      scheme: bearer
+      description: JWT account token.
   schemas:
     DecisionResult:
       type: object

@@ -10,7 +10,12 @@ from donna.config import Settings
 from donna.tools import ProfileSearcher, Tools
 from donna.google_workspace import GoogleOAuth, GoogleOAuthSettings, GoogleWorkspaceService, InMemoryCredentialStore
 from donna.auth import InMemoryAuthRepository, JWTAuth
-from donna.database import Postgres, PostgresAuthRepository, PostgresCredentialStore
+from donna.database import (
+    Postgres,
+    PostgresApprovalStore,
+    PostgresAuthRepository,
+    PostgresCredentialStore,
+)
 
 
 def _system_prompt(path: str) -> str:
@@ -23,14 +28,6 @@ def _system_prompt(path: str) -> str:
     if not content or len(content.encode()) > 32 * 1024:
         raise ValueError("system prompt must be non-empty and at most 32 KiB")
     return content
-
-
-async def _database(settings: Settings) -> Postgres | None:
-    if not settings.donna_database_url:
-        return None
-    database = Postgres(settings.donna_database_url)
-    await database.migrate()
-    return database
 
 
 def build_app(database: Postgres | None = None):
@@ -50,7 +47,7 @@ def build_app(database: Postgres | None = None):
         else None
     )
     tools = Tools(classifier, settings.donna_min_confidence, searcher)
-    database = Postgres(settings.donna_database_url) if settings.donna_database_url else None
+    database = database or (Postgres(settings.donna_database_url) if settings.donna_database_url else None)
     google = None
     if settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri:
         google = GoogleWorkspaceService(
@@ -61,7 +58,8 @@ def build_app(database: Postgres | None = None):
                     settings.google_redirect_uri,
                 ),
                 PostgresCredentialStore(database) if database else InMemoryCredentialStore(),
-            )
+            ),
+            PostgresApprovalStore(database) if database else None,
         )
     chat = ChatRuntime(
         classifier.model,
