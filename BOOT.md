@@ -45,7 +45,10 @@ Donna uses OpenRouter's native `web_search` and conditionally enables `web_fetch
 ## Verify
 
 ```powershell
-python -m pytest
+python -m pytest -p no:cacheprovider
+ruff check donna tests
+ruff format --check donna tests
+mypy donna
 ```
 
 ## HTTP endpoints

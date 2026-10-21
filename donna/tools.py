@@ -11,11 +11,29 @@ from urllib.parse import urlsplit, urlunsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 
-from donna.decision import CheckResult, DecisionResult, evaluate, route
+from donna.decision import Action, CheckResult, DecisionResult, evaluate, route
 
 TOOL_SCHEMAS = [
-    {"name": "donna_route_query", "description": "Choose how Donna should handle a user query before retrieving memory.", "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"], "additionalProperties": False}},
-    {"name": "donna_check_yes_no", "description": "Evaluate a yes/no question against evidence. A null answer means uncertain.", "input_schema": {"type": "object", "properties": {"question": {"type": "string"}, "evidence": {"type": "string"}}, "required": ["question", "evidence"], "additionalProperties": False}},
+    {
+        "name": "donna_route_query",
+        "description": "Choose how Donna should handle a user query before retrieving memory.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "donna_check_yes_no",
+        "description": "Evaluate a yes/no question against evidence. A null answer means uncertain.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"question": {"type": "string"}, "evidence": {"type": "string"}},
+            "required": ["question", "evidence"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -66,7 +84,9 @@ class ProfileSearcher:
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
         request = urllib.request.Request(self.endpoint, body, headers)
-        opener = urllib.request.build_opener(_NoRedirect(), urllib.request.HTTPSHandler(context=ssl.create_default_context()))
+        opener = urllib.request.build_opener(
+            _NoRedirect(), urllib.request.HTTPSHandler(context=ssl.create_default_context())
+        )
         try:
             with opener.open(request, timeout=10) as response:
                 if not response.geturl().startswith("https://"):
@@ -78,54 +98,94 @@ class ProfileSearcher:
             raise RuntimeError("profile search response exceeds 1 MiB")
         try:
             result = json.loads(raw)
-            if not isinstance(result, dict) or set(result) != {"candidates"} or not isinstance(result["candidates"], list) or len(result["candidates"]) > 5:
+            if (
+                not isinstance(result, dict)
+                or set(result) != {"candidates"}
+                or not isinstance(result["candidates"], list)
+                or len(result["candidates"]) > 5
+            ):
                 raise ValueError("invalid candidate list")
         except (json.JSONDecodeError, ValueError) as exc:
             raise RuntimeError("profile search provider returned invalid JSON") from exc
         candidates = []
         for item in result["candidates"]:
-            if not isinstance(item, dict) or set(item) != {"url", "platform", "display_name"} or not all(isinstance(item[key], str) for key in item):
+            if (
+                not isinstance(item, dict)
+                or set(item) != {"url", "platform", "display_name"}
+                or not all(isinstance(item[key], str) for key in item)
+            ):
                 raise RuntimeError("profile search provider returned an invalid candidate")
             try:
                 url = normalize_profile_url(item["url"])
             except ValueError:
                 continue
-            candidates.append({"url": url, "platform": item["platform"].strip(), "display_name": item["display_name"].strip(), "identity_confirmed": False})
+            candidates.append(
+                {
+                    "url": url,
+                    "platform": item["platform"].strip(),
+                    "display_name": item["display_name"].strip(),
+                    "identity_confirmed": False,
+                }
+            )
         return candidates
 
 
 class Tools:
-    def __init__(self, classifier: Any, minimum: float, profile_searcher: ProfileSearcher | None = None) -> None:
+    def __init__(
+        self, classifier: Any, minimum: float, profile_searcher: ProfileSearcher | None = None
+    ) -> None:
         self.classifier, self.minimum, self.profile_searcher = classifier, minimum, profile_searcher
 
     def definitions(self) -> list[dict]:
         definitions = list(TOOL_SCHEMAS)
         if self.profile_searcher:
-            definitions.append({"name": "donna_find_person_profiles", "description": "Find up to five unverified public profile candidates by full name and work field or broad location.", "input_schema": {"type": "object", "properties": {"first_name": {"type": "string", "minLength": 1, "maxLength": 100}, "last_name": {"type": "string", "minLength": 1, "maxLength": 100}, "work_field": {"type": "string", "maxLength": 160}, "location": {"type": "string", "maxLength": 160}}, "required": ["first_name", "last_name"], "additionalProperties": False}})
+            definitions.append(
+                {
+                    "name": "donna_find_person_profiles",
+                    "description": "Find up to five unverified public profile candidates by full name and work field or broad location.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "first_name": {"type": "string", "minLength": 1, "maxLength": 100},
+                            "last_name": {"type": "string", "minLength": 1, "maxLength": 100},
+                            "work_field": {"type": "string", "maxLength": 160},
+                            "location": {"type": "string", "maxLength": 160},
+                        },
+                        "required": ["first_name", "last_name"],
+                        "additionalProperties": False,
+                    },
+                }
+            )
         return definitions
 
     async def invoke(self, name: str, arguments: dict) -> Any:
         if name == "donna_route_query":
-            value = RouteInput.model_validate(arguments)
-            if not value.query.strip():
+            route_input = RouteInput.model_validate(arguments)
+            if not route_input.query.strip():
                 raise InvalidToolArguments("query is required")
             try:
-                result = route(await self.classifier.classify(value.query), self.minimum)
+                result = route(await self.classifier.classify(route_input.query), self.minimum)
             except UnexpectedModelBehavior:
-                result = DecisionResult(action="clarify", confidence=0)
+                result = DecisionResult(action=Action.CLARIFY, confidence=0)
             return result.model_dump(mode="json")
         if name == "donna_check_yes_no":
-            value = CheckInput.model_validate(arguments)
-            if not value.question.strip() or not value.evidence.strip():
+            check_input = CheckInput.model_validate(arguments)
+            if not check_input.question.strip() or not check_input.evidence.strip():
                 raise InvalidToolArguments("question and evidence are required")
             try:
-                result = evaluate(await self.classifier.evaluate(value.question, value.evidence), self.minimum)
+                check_result = evaluate(
+                    await self.classifier.evaluate(check_input.question, check_input.evidence),
+                    self.minimum,
+                )
             except UnexpectedModelBehavior:
-                result = CheckResult(answer=None, confidence=0)
-            return result.model_dump(mode="json")
+                check_result = CheckResult(answer=None, confidence=0)
+            return check_result.model_dump(mode="json")
         if name == "donna_find_person_profiles" and self.profile_searcher:
-            value = PersonLookup.model_validate(arguments)
-            return {"candidates": await self.profile_searcher.search(value), "note": "Search results are unverified candidates. Confirm a profile URL before researching it; name, work field, and location do not prove identity."}
+            lookup = PersonLookup.model_validate(arguments)
+            return {
+                "candidates": await self.profile_searcher.search(lookup),
+                "note": "Search results are unverified candidates. Confirm a profile URL before researching it; name, work field, and location do not prove identity.",
+            }
         if name == "donna_find_person_profiles":
             raise LookupError("public profile search is not configured")
         raise KeyError("unknown tool")

@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8"]
+dev = ["mypy>=2.4,<3", "pytest>=8", "ruff>=0.14,<1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["donna"]
@@ -24,3 +24,16 @@ packages = ["donna"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py315"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.15"
+files = ["donna"]
+check_untyped_defs = true
+warn_unused_ignores = true

@@ -11,4 +11,3 @@
 - `.env.example`: placeholder environment template; real `.env` files are gitignored.
 - `.gitignore`: excludes local environment files and Python-generated artifacts.
 - `.github/`: GitHub-specific guidance and metadata; see `.github/DOCS.md`.
-- `tasks/`: migration plan and remaining project tasks.

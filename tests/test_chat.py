@@ -11,7 +11,13 @@ class ClassifierStub:
 
 
 def runtime():
-    return ChatRuntime(TestModel(call_tools=[], custom_output_text="Hello."), ClassifierStub(), 0.55, "System prompt", search_enabled=False)
+    return ChatRuntime(
+        TestModel(call_tools=[], custom_output_text="Hello."),
+        ClassifierStub(),
+        0.55,
+        "System prompt",
+        search_enabled=False,
+    )
 
 
 def test_chat_creates_and_reuses_bounded_session():

@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     @classmethod
     def require_nonempty(cls, value: str) -> str:
         value = value.strip()
-        if not value or value.lower() in {"replace-with-your-key", "replace-with-a-local-token", "local-agent-token"}:
+        if not value or value.lower() in {
+            "replace-with-your-key",
+            "replace-with-a-local-token",
+            "local-agent-token",
+        }:
             raise ValueError("required setting is empty or still a placeholder")
         return value
