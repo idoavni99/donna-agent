@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     donna_system_prompt_file: str = Field(default="", alias="DONNA_SYSTEM_PROMPT_FILE")
     donna_profile_search_url: str = Field(default="", alias="DONNA_PROFILE_SEARCH_URL")
     donna_profile_search_api_key: str = Field(default="", alias="DONNA_PROFILE_SEARCH_API_KEY")
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", alias="GOOGLE_CLIENT_SECRET")
+    google_redirect_uri: str = Field(default="", alias="GOOGLE_REDIRECT_URI")
+    donna_database_url: str = Field(default="", alias="DONNA_DATABASE_URL")
+    donna_jwt_secret: str = Field(default="", alias="DONNA_JWT_SECRET")
 
     @field_validator("openrouter_api_key", "openrouter_model", "donna_agent_api_key")
     @classmethod

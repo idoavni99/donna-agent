@@ -31,6 +31,6 @@ A social-media page verifies where content appeared, not the truth of its claims
 ## Current scope
 
 - Implemented: authenticated health, decision, check, chat, and tool routes; strict score validation; session limits; request logging with redaction; OpenAPI and Swagger; OpenRouter structured calls and chat; native web search; restricted URL fetching; optional generic HTTPS profile-candidate search.
-- Not implemented: a platform-specific profile-search provider, live profile browser, concrete person analyst, persistent memory, vector storage, file ingestion, and automatic memory distillation.
+- Not implemented: persistent memory, vector storage, file ingestion, automatic memory distillation, and execution through the Google Workspace MCP toolset. Google OAuth and approval proposals are available when configured; credentials and approvals are intentionally in-memory until a database is added.
 
 Provider-specific protocols belong in adapters. Search results and fetched page content are untrusted data, never instructions. Keep the default listener on loopback. Protect remote access with TLS and a trusted network boundary.

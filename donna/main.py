@@ -8,6 +8,8 @@ from donna.chat import ChatRuntime
 from donna.classifier import ModelClassifier
 from donna.config import Settings
 from donna.tools import ProfileSearcher, Tools
+from donna.google_workspace import GoogleOAuth, GoogleOAuthSettings, GoogleWorkspaceService, InMemoryCredentialStore
+from donna.auth import InMemoryAuthRepository, JWTAuth
 
 
 def _system_prompt(path: str) -> str:
@@ -39,16 +41,40 @@ def build_app():
         else None
     )
     tools = Tools(classifier, settings.donna_min_confidence, searcher)
+    google = None
+    if settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri:
+        google = GoogleWorkspaceService(
+            GoogleOAuth(
+                GoogleOAuthSettings(
+                    settings.google_client_id,
+                    settings.google_client_secret,
+                    settings.google_redirect_uri,
+                ),
+                InMemoryCredentialStore(),
+            )
+        )
     chat = ChatRuntime(
         classifier.model,
         classifier,
         settings.donna_min_confidence,
         _system_prompt(settings.donna_system_prompt_file),
         tools,
+        google=google,
+    )
+    auth = (
+        JWTAuth(settings.donna_jwt_secret, InMemoryAuthRepository())
+        if settings.donna_jwt_secret
+        else None
     )
     return create_app(
         Service(
-            classifier, settings.donna_agent_api_key, settings.donna_min_confidence, chat, tools
+            classifier,
+            settings.donna_agent_api_key,
+            settings.donna_min_confidence,
+            chat,
+            tools,
+            google,
+            auth,
         )
     )
 

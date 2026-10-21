@@ -23,9 +23,12 @@ packaging==26.3
 pathspec==1.1.1
 pluggy==1.7.0
 pydantic==2.14.1
-pydantic-ai-slim[openrouter]==2.59.0
+pydantic-ai-harness[google-workspace]==0.59.0
+pydantic-ai-slim[mcp,openrouter]==2.59.0
 pydantic-graph==2.59.0
 pydantic-settings==2.16.1
+PyJWT==2.10.1
+asyncpg==0.30.0
 pydantic_core==2.50.1
 Pygments==2.21.0
 pytest==9.1.1

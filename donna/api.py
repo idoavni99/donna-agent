@@ -16,6 +16,8 @@ from donna.chat_routes import register_chat_routes
 from donna.constants import API_MAX_REQUEST_BODY_BYTES
 from donna.decision import Action, CheckResult, DecisionResult, evaluate, route
 from donna.tool_routes import register_tool_routes
+from donna.google_routes import register_google_routes
+from donna.account_routes import register_account_routes
 
 
 class RequestSizeLimit:
@@ -138,6 +140,8 @@ def create_app(service: Service) -> FastAPI:
 
     register_chat_routes(app, service)
     register_tool_routes(app, service)
+    register_google_routes(app, service)
+    register_account_routes(app, service)
 
     return app
 

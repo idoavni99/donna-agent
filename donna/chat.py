@@ -13,6 +13,7 @@ from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_ai.native_tools import WebSearchTool
+from pydantic_ai_harness.google_workspace import GoogleWorkspace
 from pydantic_ai.tools import ToolFuncEither
 
 from donna.constants import (
@@ -102,6 +103,7 @@ class ChatDeps:
     minimum: float
     session: Session
     tools: Any = None
+    google_token: str | None = None
     fetches: int = 0
 
 
@@ -114,6 +116,7 @@ class ChatRuntime:
         system_prompt: str,
         tools: Any = None,
         search_enabled: bool = True,
+        google: Any = None,
     ) -> None:
         prompt = system_prompt.strip()
         if not prompt or len(prompt.encode()) > CHAT_MAX_PROMPT_BYTES:
@@ -124,11 +127,20 @@ class ChatRuntime:
             prompt,
             tools,
         )
+        self.google = google
         capabilities = (
             [NativeTool[ChatDeps](WebSearchTool(search_context_size="medium", max_uses=2))]
             if search_enabled
             else []
         )
+        if google:
+            capabilities.append(
+                GoogleWorkspace(
+                    services=["gmail", "calendar"],
+                    auth=lambda ctx: ctx.deps.google_token,
+                    read_only=True,
+                )
+            )
         agent_tools: list[ToolFuncEither[ChatDeps]] = [
             self.donna_route_query,
             self.donna_check_yes_no,
@@ -169,7 +181,10 @@ class ChatRuntime:
             if found and not urls:
                 instructions += " A supplied URL was not safe to fetch; explain this and ask the user to provide relevant text."
             history = [part for exchange in session.exchanges for part in exchange]
-            deps = ChatDeps(self.classifier, self.minimum, session, self.tool_service)
+            google_token = self.google.oauth.access_token("default") if self.google else None
+            deps = ChatDeps(
+                self.classifier, self.minimum, session, self.tool_service, google_token
+            )
             result = await self.agent.run(
                 message,
                 deps=deps,

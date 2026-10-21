@@ -37,6 +37,9 @@ For another OS or Python version, create a fresh environment and install the pro
 | `DONNA_SYSTEM_PROMPT_FILE` | No | Packaged prompt | Optional UTF-8 system prompt override (maximum 32 KiB). |
 | `DONNA_PROFILE_SEARCH_URL` | No | Disabled | HTTPS service for unverified public-profile candidate search. |
 | `DONNA_PROFILE_SEARCH_API_KEY` | No | Empty | Optional bearer token for profile search. |
+| `GOOGLE_CLIENT_ID` | No | Empty | Google OAuth client ID; enables Workspace integration when all Google settings are set. |
+| `GOOGLE_CLIENT_SECRET` | No | Empty | Google OAuth client secret. |
+| `GOOGLE_REDIRECT_URI` | No | Empty | Registered Google OAuth callback URL. |
 | `DONNA_MIN_CONFIDENCE` | No | `0.55` | Minimum winning score required for a definite route or yes/no answer. |
 | `DONNA_ADDR` | No | `127.0.0.1:8080` | HTTP server bind address. |
 
