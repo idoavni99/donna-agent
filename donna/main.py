@@ -10,6 +10,7 @@ from donna.config import Settings
 from donna.tools import ProfileSearcher, Tools
 from donna.google_workspace import GoogleOAuth, GoogleOAuthSettings, GoogleWorkspaceService, InMemoryCredentialStore
 from donna.auth import InMemoryAuthRepository, JWTAuth
+from donna.database import Postgres, PostgresAuthRepository, PostgresCredentialStore
 
 
 def _system_prompt(path: str) -> str:
@@ -24,7 +25,15 @@ def _system_prompt(path: str) -> str:
     return content
 
 
-def build_app():
+async def _database(settings: Settings) -> Postgres | None:
+    if not settings.donna_database_url:
+        return None
+    database = Postgres(settings.donna_database_url)
+    await database.migrate()
+    return database
+
+
+def build_app(database: Postgres | None = None):
     settings = Settings()  # type: ignore[call-arg]  # Loaded from aliased environment settings.
     level = {"WARN": "WARNING"}.get(
         settings.donna_log_level.upper(), settings.donna_log_level.upper()
@@ -41,6 +50,7 @@ def build_app():
         else None
     )
     tools = Tools(classifier, settings.donna_min_confidence, searcher)
+    database = Postgres(settings.donna_database_url) if settings.donna_database_url else None
     google = None
     if settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri:
         google = GoogleWorkspaceService(
@@ -50,7 +60,7 @@ def build_app():
                     settings.google_client_secret,
                     settings.google_redirect_uri,
                 ),
-                InMemoryCredentialStore(),
+                PostgresCredentialStore(database) if database else InMemoryCredentialStore(),
             )
         )
     chat = ChatRuntime(
@@ -61,11 +71,8 @@ def build_app():
         tools,
         google=google,
     )
-    auth = (
-        JWTAuth(settings.donna_jwt_secret, InMemoryAuthRepository())
-        if settings.donna_jwt_secret
-        else None
-    )
+    auth_repository = PostgresAuthRepository(database) if database else InMemoryAuthRepository()
+    auth = JWTAuth(settings.donna_jwt_secret, auth_repository) if settings.donna_jwt_secret else None
     return create_app(
         Service(
             classifier,
@@ -75,6 +82,7 @@ def build_app():
             tools,
             google,
             auth,
+            database,
         )
     )
 

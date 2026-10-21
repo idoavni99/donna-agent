@@ -159,7 +159,9 @@ class ChatRuntime:
         self.sessions: dict[str, Session] = {}
         self.sessions_lock = asyncio.Lock()
 
-    async def reply(self, message: str, session_id: str = "") -> dict[str, str]:
+    async def reply(
+        self, message: str, session_id: str = "", user_id: str = "default"
+    ) -> dict[str, str]:
         message = message.strip()
         if not message:
             raise EmptyMessage()
@@ -181,7 +183,7 @@ class ChatRuntime:
             if found and not urls:
                 instructions += " A supplied URL was not safe to fetch; explain this and ask the user to provide relevant text."
             history = [part for exchange in session.exchanges for part in exchange]
-            google_token = self.google.oauth.access_token("default") if self.google else None
+            google_token = await self.google.oauth.access_token(user_id) if self.google else None
             deps = ChatDeps(
                 self.classifier, self.minimum, session, self.tool_service, google_token
             )

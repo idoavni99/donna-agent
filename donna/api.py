@@ -4,6 +4,7 @@ import json
 import logging
 from pathlib import Path
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import PlainTextResponse
@@ -75,7 +76,18 @@ class RequestSizeLimit:
 
 
 def create_app(service: Service) -> FastAPI:
-    app = FastAPI(title="Donna", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if service.database is not None:
+            await service.database.migrate()
+        yield
+        if service.database is not None:
+            await service.database.close()
+
+    app = FastAPI(
+        title="Donna", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None,
+        lifespan=lifespan,
+    )
     app.add_middleware(RequestSizeLimit)
 
     @app.exception_handler(HTTPException)

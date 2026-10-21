@@ -22,7 +22,7 @@ def register_google_routes(app: FastAPI, service: Service) -> None:
     @app.get("/v1/integrations/google/callback")
     async def google_callback(state: str, code: str) -> dict[str, str]:
         try:
-            google.oauth.complete(state, code)
+            await google.oauth.complete(state, code)
         except Exception as exc:
             raise HTTPException(400, "Google authorization failed") from exc
         return {"status": "connected"}
@@ -31,7 +31,7 @@ def register_google_routes(app: FastAPI, service: Service) -> None:
     async def google_disconnect(user: User = Depends(service.current_user)) -> dict[str, str]:
         if user is None:
             raise HTTPException(401, "unauthorized")
-        google.oauth.store.delete(user.id)
+        await google.oauth.store.delete(user.id)
         return {"status": "disconnected"}
 
     @app.get("/v1/approvals")

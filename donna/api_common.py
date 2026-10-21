@@ -22,8 +22,11 @@ class Service:
         tools: Any = None,
         google: Any = None,
         auth: JWTAuth | None = None,
+        database: Any = None,
     ) -> None:
-        self.classifier, self.chat, self.tools, self.google, self.auth = classifier, chat, tools, google, auth
+        self.classifier, self.chat, self.tools, self.google, self.auth, self.database = (
+            classifier, chat, tools, google, auth, database
+        )
         self.token = token
         self.minimum = minimum
 

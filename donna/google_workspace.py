@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import json
@@ -36,9 +35,9 @@ class GoogleCredential:
 
 
 class CredentialStore(Protocol):
-    def save(self, user_id: str, credential: GoogleCredential) -> None: ...
-    def get(self, user_id: str) -> GoogleCredential | None: ...
-    def delete(self, user_id: str) -> None: ...
+    async def save(self, user_id: str, credential: GoogleCredential) -> None: ...
+    async def get(self, user_id: str) -> GoogleCredential | None: ...
+    async def delete(self, user_id: str) -> None: ...
 
 
 class InMemoryCredentialStore:
@@ -47,13 +46,13 @@ class InMemoryCredentialStore:
     def __init__(self) -> None:
         self._items: dict[str, GoogleCredential] = {}
 
-    def save(self, user_id: str, credential: GoogleCredential) -> None:
+    async def save(self, user_id: str, credential: GoogleCredential) -> None:
         self._items[user_id] = credential
 
-    def get(self, user_id: str) -> GoogleCredential | None:
+    async def get(self, user_id: str) -> GoogleCredential | None:
         return self._items.get(user_id)
 
-    def delete(self, user_id: str) -> None:
+    async def delete(self, user_id: str) -> None:
         self._items.pop(user_id, None)
 
 
@@ -81,7 +80,7 @@ class GoogleOAuth:
         )
         return "https://accounts.google.com/o/oauth2/v2/auth?" + query
 
-    def complete(self, state: str, code: str) -> str:
+    async def complete(self, state: str, code: str) -> str:
         item = self._states.pop(state, None)
         if item is None or item[1] < time.time():
             raise ValueError("invalid or expired OAuth state")
@@ -106,7 +105,7 @@ class GoogleOAuth:
         refresh = result.get("refresh_token")
         if not isinstance(refresh, str) or not refresh:
             raise ValueError("Google did not return a refresh token")
-        self.store.save(
+        await self.store.save(
             user_id,
             GoogleCredential(
                 refresh_token=refresh,
@@ -116,8 +115,8 @@ class GoogleOAuth:
         )
         return user_id
 
-    def access_token(self, user_id: str) -> str | None:
-        credential = self.store.get(user_id)
+    async def access_token(self, user_id: str) -> str | None:
+        credential = await self.store.get(user_id)
         if credential is None:
             return None
         if credential.access_token and credential.expires_at > time.time() + 60:
@@ -142,7 +141,7 @@ class GoogleOAuth:
             return None
         credential.access_token = str(result.get("access_token", ""))
         credential.expires_at = time.time() + float(result.get("expires_in", 3600))
-        self.store.save(user_id, credential)
+        await self.store.save(user_id, credential)
         return credential.access_token or None
 
 
