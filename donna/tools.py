@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import http.client
 import json
 import ssl
 import urllib.error
@@ -11,7 +12,17 @@ from urllib.parse import urlsplit, urlunsplit
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 
+from donna.constants import (
+    PROFILE_SEARCH_MAX_CANDIDATES,
+    PROFILE_SEARCH_MAX_RESPONSE_BYTES,
+    PROFILE_SEARCH_MAX_TEXT_CHARS,
+    PROFILE_SEARCH_TIMEOUT_SECONDS,
+    PROFILE_NAME_MAX_CHARS,
+    PROFILE_CONTEXT_MAX_CHARS,
+    PUBLIC_URL_MAX_CHARS,
+)
 from donna.decision import Action, CheckResult, DecisionResult, evaluate, route
+from donna.retry import retry_request
 
 TOOL_SCHEMAS = [
     {
@@ -51,10 +62,10 @@ class CheckInput(StrictModel):
 
 
 class PersonLookup(StrictModel):
-    first_name: str = Field(min_length=1, max_length=100)
-    last_name: str = Field(min_length=1, max_length=100)
-    work_field: str = Field(default="", max_length=160)
-    location: str = Field(default="", max_length=160)
+    first_name: str = Field(min_length=1, max_length=PROFILE_NAME_MAX_CHARS)
+    last_name: str = Field(min_length=1, max_length=PROFILE_NAME_MAX_CHARS)
+    work_field: str = Field(default="", max_length=PROFILE_CONTEXT_MAX_CHARS)
+    location: str = Field(default="", max_length=PROFILE_CONTEXT_MAX_CHARS)
 
     @field_validator("first_name", "last_name", "work_field", "location", mode="before")
     @classmethod
@@ -87,22 +98,28 @@ class ProfileSearcher:
         opener = urllib.request.build_opener(
             _NoRedirect(), urllib.request.HTTPSHandler(context=ssl.create_default_context())
         )
-        try:
-            with opener.open(request, timeout=10) as response:
+
+        def send_request() -> bytes:
+            with opener.open(request, timeout=PROFILE_SEARCH_TIMEOUT_SECONDS) as response:
                 if not response.geturl().startswith("https://"):
                     raise ValueError("profile search provider redirected outside HTTPS")
-                raw = response.read((1 << 20) + 1)
-        except (OSError, urllib.error.URLError) as exc:
+                return response.read(PROFILE_SEARCH_MAX_RESPONSE_BYTES + 1)
+
+        try:
+            raw = retry_request(send_request)
+        except (OSError, urllib.error.URLError, http.client.HTTPException) as exc:
             raise RuntimeError("profile search provider unavailable") from exc
-        if len(raw) > 1 << 20:
-            raise RuntimeError("profile search response exceeds 1 MiB")
+        if len(raw) > PROFILE_SEARCH_MAX_RESPONSE_BYTES:
+            raise RuntimeError(
+                f"profile search response exceeds {PROFILE_SEARCH_MAX_RESPONSE_BYTES // 1024} KiB"
+            )
         try:
             result = json.loads(raw)
             if (
                 not isinstance(result, dict)
                 or set(result) != {"candidates"}
                 or not isinstance(result["candidates"], list)
-                or len(result["candidates"]) > 5
+                or len(result["candidates"]) > PROFILE_SEARCH_MAX_CANDIDATES
             ):
                 raise ValueError("invalid candidate list")
         except (json.JSONDecodeError, ValueError) as exc:
@@ -113,6 +130,10 @@ class ProfileSearcher:
                 not isinstance(item, dict)
                 or set(item) != {"url", "platform", "display_name"}
                 or not all(isinstance(item[key], str) for key in item)
+                or any(
+                    len(item[key]) > PROFILE_SEARCH_MAX_TEXT_CHARS
+                    for key in ("platform", "display_name")
+                )
             ):
                 raise RuntimeError("profile search provider returned an invalid candidate")
             try:
@@ -146,10 +167,24 @@ class Tools:
                     "input_schema": {
                         "type": "object",
                         "properties": {
-                            "first_name": {"type": "string", "minLength": 1, "maxLength": 100},
-                            "last_name": {"type": "string", "minLength": 1, "maxLength": 100},
-                            "work_field": {"type": "string", "maxLength": 160},
-                            "location": {"type": "string", "maxLength": 160},
+                            "first_name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": PROFILE_NAME_MAX_CHARS,
+                            },
+                            "last_name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": PROFILE_NAME_MAX_CHARS,
+                            },
+                            "work_field": {
+                                "type": "string",
+                                "maxLength": PROFILE_CONTEXT_MAX_CHARS,
+                            },
+                            "location": {
+                                "type": "string",
+                                "maxLength": PROFILE_CONTEXT_MAX_CHARS,
+                            },
                         },
                         "required": ["first_name", "last_name"],
                         "additionalProperties": False,
@@ -196,6 +231,8 @@ class InvalidToolArguments(ValueError):
 
 
 def normalize_profile_url(raw: str) -> str:
+    if len(raw) > PUBLIC_URL_MAX_CHARS:
+        raise ValueError("profile candidate URL is too long")
     parsed = urlsplit(raw.strip())
     if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("profile candidate URL must use HTTPS")

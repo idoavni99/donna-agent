@@ -2,12 +2,15 @@ from pydantic_ai import Agent
 from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 
+from donna.constants import HTTP_MAX_ATTEMPTS
 from donna.decision import Scores, YesNoScores
 
 
 class ModelClassifier:
     def __init__(self, api_key: str, model_name: str, app_url: str = "") -> None:
         provider = OpenRouterProvider(api_key=api_key, app_url=app_url or None, app_title="Donna")
+        # OpenRouterProvider exposes its AsyncOpenAI client; the SDK applies backoff and jitter.
+        provider.client.max_retries = HTTP_MAX_ATTEMPTS - 1
         model = OpenRouterModel(model_name, provider=provider)
         self.model = model
         self._route = Agent(

@@ -11,17 +11,24 @@ from urllib.parse import urlsplit
 from pydantic_ai import Agent, RunContext, UsageLimits
 from pydantic_ai.capabilities import NativeTool
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 from pydantic_ai.native_tools import WebSearchTool
 from pydantic_ai.tools import ToolFuncEither
 
+from donna.constants import (
+    CHAT_MAX_HISTORY_BYTES,
+    CHAT_MAX_HISTORY_MESSAGES,
+    CHAT_MAX_INPUT_BYTES,
+    CHAT_MAX_PROMPT_BYTES,
+    CHAT_MAX_REMEMBERED_HOSTS,
+    CHAT_MAX_REMEMBERED_URLS,
+    CHAT_MAX_SESSIONS,
+    CHAT_SESSION_TTL_SECONDS,
+    PUBLIC_URL_MAX_CHARS,
+    WEB_MAX_FETCHES_PER_TURN,
+)
 from donna.decision import Action, CheckResult, DecisionResult, evaluate, route
-from donna.web import fetch_public_url, find_public_urls, MAX_FETCHES
-
-MAX_INPUT_BYTES = 16 * 1024
-MAX_PROMPT_BYTES = 32 * 1024
-MAX_SESSIONS = 128
-SESSION_TTL = 2 * 60 * 60
-MAX_HISTORY_MESSAGES = 24
+from donna.web import fetch_public_url, find_public_urls
 
 
 class ChatError(Exception):
@@ -45,6 +52,10 @@ class SessionCapacity(ChatError):
     status_code, message = 503, "chat sessions at capacity"
 
 
+class SessionHistoryLimit(ChatError):
+    status_code, message = 503, "chat history exceeded its storage limit; start a new session"
+
+
 @dataclass
 class Session:
     last_used: float = field(default_factory=time.monotonic)
@@ -56,15 +67,33 @@ class Session:
     def remember_urls(self, urls: list[str]) -> None:
         for url in urls:
             host = urlsplit(url).hostname
-            if url not in self.urls and len(self.urls) < 10 and len(url) <= 2048:
+            if (
+                url not in self.urls
+                and len(self.urls) < CHAT_MAX_REMEMBERED_URLS
+                and len(url) <= PUBLIC_URL_MAX_CHARS
+            ):
                 self.urls.append(url)
-            if host and host not in self.hosts and len(self.hosts) < 10:
+            if host and host not in self.hosts and len(self.hosts) < CHAT_MAX_REMEMBERED_HOSTS:
                 self.hosts.append(host)
 
-    def append_exchange(self, messages: list[Any]) -> None:
+    def append_exchange(self, messages: list[Any]) -> bool:
+        if (
+            len(messages) > CHAT_MAX_HISTORY_MESSAGES
+            or len(ModelMessagesTypeAdapter.dump_json(messages)) > CHAT_MAX_HISTORY_BYTES
+        ):
+            return False
         self.exchanges.append(messages)
-        while len(self.exchanges) > 1 and sum(map(len, self.exchanges)) > MAX_HISTORY_MESSAGES:
+        while len(self.exchanges) > 1 and (
+            sum(map(len, self.exchanges)) > CHAT_MAX_HISTORY_MESSAGES
+            or len(
+                ModelMessagesTypeAdapter.dump_json(
+                    [part for exchange in self.exchanges for part in exchange]
+                )
+            )
+            > CHAT_MAX_HISTORY_BYTES
+        ):
             self.exchanges.pop(0)
+        return True
 
 
 @dataclass
@@ -87,7 +116,7 @@ class ChatRuntime:
         search_enabled: bool = True,
     ) -> None:
         prompt = system_prompt.strip()
-        if not prompt or len(prompt.encode()) > MAX_PROMPT_BYTES:
+        if not prompt or len(prompt.encode()) > CHAT_MAX_PROMPT_BYTES:
             raise ValueError("system prompt must be non-empty and at most 32 KiB")
         self.classifier, self.minimum, self.system_prompt, self.tool_service = (
             classifier,
@@ -122,7 +151,7 @@ class ChatRuntime:
         message = message.strip()
         if not message:
             raise EmptyMessage()
-        if len(message.encode()) > MAX_INPUT_BYTES:
+        if len(message.encode()) > CHAT_MAX_INPUT_BYTES:
             raise ValueError("chat message exceeds 16384 bytes")
         session_id, session = await self._acquire(session_id)
         async with session.lock:
@@ -151,7 +180,8 @@ class ChatRuntime:
             answer = str(result.output).strip()
             if not answer:
                 raise RuntimeError("agent returned an empty response")
-            session.append_exchange(result.new_messages())
+            if not session.append_exchange(result.new_messages()):
+                raise SessionHistoryLimit()
             session.last_used = time.monotonic()
             return {"answer": answer, "session_id": session_id}
 
@@ -163,7 +193,7 @@ class ChatRuntime:
             self.sessions = {
                 key: value
                 for key, value in self.sessions.items()
-                if now - value.last_used <= SESSION_TTL
+                if now - value.last_used <= CHAT_SESSION_TTL_SECONDS
             }
             if requested:
                 session = self.sessions.get(requested)
@@ -171,7 +201,7 @@ class ChatRuntime:
                     raise SessionNotFound()
                 session.last_used = now
                 return requested, session
-            if len(self.sessions) >= MAX_SESSIONS:
+            if len(self.sessions) >= CHAT_MAX_SESSIONS:
                 raise SessionCapacity()
             session_id = secrets.token_hex(16)
             session = Session()
@@ -200,7 +230,7 @@ class ChatRuntime:
 
     async def web_fetch(self, ctx: RunContext[ChatDeps], url: str) -> str:
         """Fetch a public URL selected by the user in this chat session."""
-        if ctx.deps.fetches >= MAX_FETCHES:
+        if ctx.deps.fetches >= WEB_MAX_FETCHES_PER_TURN:
             return "Fetch limit reached."
         ctx.deps.fetches += 1
         return await asyncio.to_thread(fetch_public_url, url, ctx.deps.session.hosts)

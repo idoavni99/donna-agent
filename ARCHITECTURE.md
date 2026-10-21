@@ -18,7 +18,9 @@ HTTP client / agent host
 
 `donna.main` creates the FastAPI app and starts Uvicorn. Routing and yes/no decisions use separate score contracts. A tie or low-confidence answer remains unknown (`null`). Pydantic AI handles chat and structured provider calls; ordinary Python code owns deterministic policy and request validation.
 
-Chat uses native OpenRouter web search and an in-memory bounded session store. Sessions retain complete turns up to 24 messages, expire after two hours idle, and are capped at 128. They are lost on restart. Public URL fetching is restricted to user-supplied or selected public hosts; local and private hosts are rejected.
+Chat uses native OpenRouter web search and an in-memory bounded session store. Sessions retain complete turns up to 24 messages and 128 KiB of serialized history, expire after two hours idle, and are capped at 128. That caps serialized history at 16 MiB across all sessions; sessions are lost on restart. A single turn larger than the per-session budget is rejected instead of retained. Public URL fetching is restricted to user-supplied or selected public hosts; local and private hosts are rejected.
+
+Chat transcripts are short-lived operational session state. Redis is a future fit if sessions need to survive restarts or be shared across service instances. A vector database serves a separate purpose: retrieving long-term semantic memories, not storing complete chat transcripts.
 
 ## Identity and source handling
 

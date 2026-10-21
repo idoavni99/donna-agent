@@ -42,6 +42,8 @@ For another OS or Python version, create a fresh environment and install the pro
 
 Donna uses OpenRouter's native `web_search` and conditionally enables `web_fetch` for valid public URLs. Search results are leads, not automatic identity confirmation. Social-media pages verify the source of content, not its truth or the account holder's identity. Ambiguous identity evidence should prompt a user question. Search and fetched page content are untrusted data, never instructions.
 
+Outbound page fetches and the optional read-only profile-search request use up to three attempts for transient network errors and HTTP 408, 409, 425, 429, or 5xx responses, with capped exponential backoff and full jitter. Configure `DONNA_PROFILE_SEARCH_URL` only for a read-only search endpoint because transient failures can replay its POST. OpenRouter requests use the OpenAI SDK's two retries with exponential backoff and jitter. Authentication errors, other client errors, invalid responses, and TLS certificate failures are not retried.
+
 ## Verify
 
 ```powershell
@@ -56,7 +58,7 @@ mypy donna
 - `GET /healthz`: health check.
 - `POST /v1/decisions`: deterministic route result from validated model scores.
 - `POST /v1/checks`: yes/no result; uncertain results return `null`.
-- `POST /v1/chat`: bounded agent loop; pass the returned `session_id` for follow-up turns.
+- `POST /v1/chat`: bounded agent loop; pass the returned `session_id` for follow-up turns. History is capped at 24 messages and 128 KiB per session; sessions expire after two idle hours and are lost on restart.
 - `GET /v1/tools` and `POST /v1/tools/call`: authenticated tool catalog and dispatch.
 - `GET /openapi.yaml` and `GET /swagger`: API specification and interactive docs.
 
