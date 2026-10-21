@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "donna-assistant"
+version = "0.1.0"
+requires-python = ">=3.15"
+dependencies = [
+  "fastapi>=0.120,<1",
+  "pydantic-ai-slim[openrouter]>=2,<3",
+  "pydantic-settings>=2.10,<3",
+  "uvicorn>=0.35,<1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["donna"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"donna/openapi.yaml" = "donna/openapi.yaml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
