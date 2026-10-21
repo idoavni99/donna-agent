@@ -1,13 +1,13 @@
 # Root Directory
 
-- `DOCS.md`: this directory's file and subdirectory map.
 - `README.md`: project overview and documentation entry points.
 - `ARCHITECTURE.md`: package boundaries, runtime flow, scope, and design rationale.
-- `BOOT.md`: prerequisites, environment variables, provider contracts, and run/test commands.
+- `BOOT.md`: Python setup, environment variables, and run/verification commands.
 - `AGENTS.md`: persistent project instructions for coding agents.
-- `go.mod`: Go module name and minimum language version.
+- `pyproject.toml`: Python package and dependency configuration.
+- `requirements.txt`: pinned Python 3.15 Windows dependencies.
+- `donna/`: service, policy, settings, and provider adapters; see `donna/DOCS.md`.
+- `tests/`: Python API, chat, and decision tests; see `tests/DOCS.md`.
 - `.env.example`: placeholder environment template; real `.env` files are gitignored.
-- `.gitignore`: excludes local environment files while allowing the example template.
-- `.github/`: Copilot-specific guidance; see `.github/DOCS.md`.
-- `cmd/`: executable entry points; see `cmd/DOCS.md`.
-- `internal/`: implementation packages; see `internal/DOCS.md`.
+- `.gitignore`: excludes local environment files and Python-generated artifacts.
+- `.github/`: GitHub-specific guidance and metadata; see `.github/DOCS.md`.

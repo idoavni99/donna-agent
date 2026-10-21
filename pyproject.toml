@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "donna-assistant"
+version = "0.1.0"
+requires-python = ">=3.15"
+dependencies = [
+  "fastapi>=0.120,<1",
+  "pydantic-ai-slim[openrouter]>=2,<3",
+  "pydantic-settings>=2.10,<3",
+  "uvicorn>=0.35,<1",
+]
+
+[dependency-groups]
+dev = ["mypy>=2.4,<3", "pytest>=8", "ruff>=0.14,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["donna"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"donna/openapi.yaml" = "donna/openapi.yaml"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py315"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.15"
+files = ["donna"]
+check_untyped_defs = true
+warn_unused_ignores = true

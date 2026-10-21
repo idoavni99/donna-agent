@@ -1,16 +1,17 @@
 # Donna
 
-Donna is a Go personal-assistant backend using the OpenRouter Go SDK for chat and decision calls. Chat can fetch user-supplied public URLs through OpenRouter's restricted web-fetch tool. The agent brain also exposes a provider-neutral tool interface.
+Donna is a Python personal-assistant backend built with FastAPI, Pydantic, and Pydantic AI. It uses OpenRouter for chat and decision calls.
 
 ## Start here
 
-- [BOOT.md](BOOT.md): Go version, environment variables, provider contracts, and run commands.
+- [BOOT.md](BOOT.md): Python setup, environment variables, run and verification commands.
+- [donna/](donna/): Python application and package map.
 - [ARCHITECTURE.md](ARCHITECTURE.md): package boundaries, data flow, and design rationale.
 - [DOCS.md](DOCS.md): root files and directory map.
 - [AGENTS.md](AGENTS.md): persistent project instructions for coding agents.
 - [Swagger UI](http://127.0.0.1:8080/swagger): interactive HTTP API documentation after startup.
 
-Each source directory also contains a `DOCS.md` describing its files. Donna uses the OpenRouter Go SDK for its chat loop. Other runtimes can use the authenticated `/v1/tools` HTTP bridge. Live browser/analysis providers and SDK adapters for other model vendors are not included yet; see [ARCHITECTURE.md](ARCHITECTURE.md#current-scope) for the current boundary.
+The service exposes an authenticated `/v1/tools` bridge and uses Pydantic AI's OpenRouter provider with native web-search capability. Live public-profile browser and analysis providers are not connected; see [ARCHITECTURE.md](ARCHITECTURE.md#current-scope).
 
 `POST /v1/chat` returns a `session_id`; include it on follow-up requests to continue the conversation and research an already selected URL.
 
